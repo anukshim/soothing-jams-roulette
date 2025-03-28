@@ -1,36 +1,49 @@
-
 import React, { useState } from 'react';
-import { getRandomSongs } from '@/lib/songs';
-import { Song } from '@/lib/types';
-import SongPlayer from '@/components/SongPlayer';
 import LuckyButton from '@/components/LuckyButton';
-import { CirclePlay, Headphones } from 'lucide-react';
+import { CirclePlay, Headphones, Search } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { YouTubeSearch } from '@/components/YouTubeSearch';
+import { getExtendedRandomKeyword } from '@/lib/extendedKeywords';
+import { searchYouTube, YouTubeSearchResult } from '@/lib/youtube';
 
 const Index = () => {
-  const [songs, setSongs] = useState<Song[]>([]);
+  const [luckyResults, setLuckyResults] = useState<YouTubeSearchResult[]>([]);
+  const [currentKeyword, setCurrentKeyword] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [hasClickedOnce, setHasClickedOnce] = useState(false);
+  const [showYouTubeSearch, setShowYouTubeSearch] = useState(false);
   const { toast } = useToast();
 
-  const handleGetLuckySongs = () => {
+  const handleGetLuckySongs = async () => {
     setIsLoading(true);
+    setShowYouTubeSearch(false);
     
-    // Simulate loading delay for better UX
-    setTimeout(() => {
-      const randomSongs = getRandomSongs(2);
-      setSongs(randomSongs);
-      setIsLoading(false);
+    try {
+      const keyword = getExtendedRandomKeyword();
+      setCurrentKeyword(keyword);
+      const results = await searchYouTube(keyword);
+      setLuckyResults(results.slice(0, 2)); // Get top 2 results
       
       if (!hasClickedOnce) {
         setHasClickedOnce(true);
       }
       
+      // Create a more friendly message by removing duration filter from display
+      const displayKeyword = keyword.replace(' duration:2..5', '');
+      
       toast({
         title: "New songs found!",
-        description: "Enjoy your lucky tunes for tonight's self-care routine.",
+        description: `Found some ${displayKeyword.toLowerCase()} for you to enjoy.`,
       });
-    }, 600);
+    } catch (error) {
+      toast({
+        title: "Error finding songs",
+        description: "Please try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -44,24 +57,37 @@ const Index = () => {
           </h1>
         </div>
         <p className="text-white/70 max-w-md mx-auto">
-          Discover relaxing songs for your nighttime self-care routine
+          Discover amazing songs for every mood and genre
         </p>
       </header>
 
       {/* Main content */}
       <main className="flex-1 w-full max-w-4xl px-4 py-8 flex flex-col items-center">
-        <div className="mb-12 text-center">
+        <div className="mb-12 text-center space-y-4">
           <LuckyButton onClick={handleGetLuckySongs} isLoading={isLoading} />
+          <button
+            onClick={() => setShowYouTubeSearch(!showYouTubeSearch)}
+            className="flex items-center gap-2 px-4 py-2 text-sm text-white/70 hover:text-white transition-colors"
+          >
+            <Search className="w-4 h-4" />
+            {showYouTubeSearch ? 'Hide YouTube Search' : 'Search YouTube'}
+          </button>
         </div>
         
-        {!hasClickedOnce && (
+        {showYouTubeSearch && (
+          <div className="w-full mb-12">
+            <YouTubeSearch />
+          </div>
+        )}
+        
+        {!hasClickedOnce && !showYouTubeSearch && !luckyResults.length && (
           <div className="text-center py-16 space-y-6 max-w-md mx-auto">
             <CirclePlay className="w-16 h-16 text-lucky-lavender/80 mx-auto animate-pulse-slow" />
             <h2 className="text-xl text-white/90 font-medium">
-              Ready for your nightly musical journey?
+              Ready for your musical journey?
             </h2>
             <p className="text-white/60">
-              Press the "I'm Feeling Lucky" button to discover curated songs perfect for your self-care routine.
+              Press the "I'm Feeling Lucky" button to discover amazing songs from various genres.
             </p>
           </div>
         )}
@@ -74,14 +100,38 @@ const Index = () => {
           </div>
         )}
         
-        {!isLoading && songs.length > 0 && (
+        {!isLoading && luckyResults.length > 0 && (
           <div className="w-full">
-            <h2 className="text-xl font-medium text-white/90 mb-6 text-center">
+            <h2 className="text-xl font-medium text-white/90 mb-2 text-center">
               Tonight's Lucky Picks
             </h2>
+            {currentKeyword && (
+              <p className="text-center text-white/60 mb-6">
+                {currentKeyword.replace(' duration:2..5', '')}
+              </p>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {songs.map((song) => (
-                <SongPlayer key={song.id} song={song} />
+              {luckyResults.map((result) => (
+                <div
+                  key={result.id.videoId}
+                  className="flex flex-col gap-4 p-4 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors"
+                >
+                  <div className="aspect-video w-full">
+                    <iframe
+                      width="100%"
+                      height="100%"
+                      src={`https://www.youtube.com/embed/${result.id.videoId}`}
+                      title={result.snippet.title}
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    ></iframe>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white">{result.snippet.title}</h3>
+                    <p className="text-sm text-white/60 line-clamp-2 mt-1">{result.snippet.description}</p>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
